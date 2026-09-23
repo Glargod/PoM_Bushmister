@@ -25,7 +25,7 @@ const int   POST_DAWN_OFFSET   = 400;
 const int   MIN_RANGE_FOR_DYNAMIC = 800;
 
 const int   BURSTS_PER_SEQUENCE = 3;
-const int   FART_CHANCE_PERCENT = 20;
+const int   FART_CHANCE_PERCENT = 7;
 
 const uint64_t SLEEP_MINUTES   = 8;
 const uint32_t WAKES_PER_DAY   = 180;
