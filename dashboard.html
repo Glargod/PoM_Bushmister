@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PoM – Piss-o-Matic</title>
+<style>
+  :root {
+    --bg: #0f1410;
+    --panel: #1a231c;
+    --ink: #e8f0e4;
+    --muted: #8aa08a;
+    --good: #7dce6a;
+    --warn: #e0b44b;
+    --bad: #e07060;
+    --accent: #6ecb8b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: ui-sans-serif, system-ui, Segoe UI, sans-serif;
+    background: radial-gradient(1200px 600px at 20% -10%, #1c3324 0%, var(--bg) 55%);
+    color: var(--ink);
+    min-height: 100vh;
+    padding: 1rem;
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 .25rem; letter-spacing: .04em; }
+  .sub { color: var(--muted); font-size: .85rem; margin-bottom: 1rem; }
+  .row { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: .8rem; }
+  button {
+    background: #243328;
+    color: var(--ink);
+    border: 1px solid #3a5340;
+    border-radius: 10px;
+    padding: .55rem .85rem;
+    font-size: .95rem;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.good { background: #1e3a24; border-color: #3d7a48; }
+  button.bad { background: #3a2220; border-color: #7a403a; }
+  .card {
+    background: var(--panel);
+    border: 1px solid #2c3c30;
+    border-radius: 14px;
+    padding: 1rem;
+    flex: 1 1 160px;
+    min-width: 140px;
+  }
+  .k { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
+  .v { font-size: 1.6rem; font-weight: 650; margin-top: .2rem; }
+  .dot {
+    display: inline-block; width: .7rem; height: .7rem; border-radius: 50%;
+    margin-right: .4rem; background: var(--muted);
+  }
+  .dot.on { background: var(--good); box-shadow: 0 0 8px var(--good); }
+  .dot.off { background: var(--bad); }
+  pre {
+    background: #101610;
+    border-radius: 10px;
+    padding: .75rem;
+    overflow: auto;
+    font-size: .75rem;
+    color: #b7cbb7;
+    max-height: 240px;
+  }
+  input[type=number] {
+    width: 4.2rem;
+    background: #101610;
+    color: var(--ink);
+    border: 1px solid #3a5340;
+    border-radius: 8px;
+    padding: .4rem;
+  }
+  .ok { color: var(--good); }
+  .no { color: var(--bad); }
+</style>
+</head>
+<body>
+  <h1>PoM — Piss-o-Matic</h1>
+  <div class="sub">Bluetooth dashboard · Chrome / Edge · HTTPS or localhost</div>
+
+  <div class="row">
+    <button class="good" id="btnConnect">Connect</button>
+    <button id="btnDisconnect" disabled>Disconnect</button>
+    <span id="conn" class="sub">not connected</span>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div class="k">Mister</div>
+      <div class="v"><span class="dot off" id="dotOn"></span><span id="valOn">—</span></div>
+    </div>
+    <div class="card">
+      <div class="k">Temp</div>
+      <div class="v" id="valT">—</div>
+    </div>
+    <div class="card">
+      <div class="k">RH</div>
+      <div class="v" id="valH">—</div>
+    </div>
+    <div class="card">
+      <div class="k">LDR</div>
+      <div class="v" id="valLdr">—</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="card">
+      <div class="k">Auto mist</div>
+      <div class="v" id="valAuto">—</div>
+    </div>
+    <div class="card">
+      <div class="k">Sleep</div>
+      <div class="v" id="valSleep">—</div>
+    </div>
+    <div class="card">
+      <div class="k">LDR min / max</div>
+      <div class="v" id="valRange">—</div>
+    </div>
+    <div class="card">
+      <div class="k">Δ light</div>
+      <div class="v" id="valD">—</div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="bad" id="btnOff">Force OFF</button>
+    <button class="good" id="btnOn">Force ON</button>
+    <button id="btnMist">3-burst mist</button>
+    <button id="btnFart">Fart</button>
+    <button id="btnAutoOn">Auto ON</button>
+    <button id="btnAutoOff">Auto OFF</button>
+    <button id="btnReset">Reset cal + log</button>
+    <button id="btnLog">Dump log</button>
+    <button id="btnSleep">Sleep now</button>
+    <label class="sub">Sleep min
+      <input type="number" id="sleepMin" min="1" max="60" value="8" />
+    </label>
+    <button id="btnSetSleep">Set sleep</button>
+  </div>
+
+  <pre id="log">(waiting)</pre>
+
+<script>
+const NUS_SERVICE = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_RX      = '6e400002-b5a3-f393-e0a9-e50e24dcca9e';
+const NUS_TX      = '6e400003-b5a3-f393-e0a9-e50e24dcca9e';
+
+let device, server, rx, tx;
+let buf = '';
+
+const $ = id => document.getElementById(id);
+function log(s) {
+  const el = $('log');
+  el.textContent = (new Date().toLocaleTimeString()) + '  ' + s + '\n' + el.textContent;
+}
+
+async function connect() {
+  device = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: 'PoM' }],
+    optionalServices: [NUS_SERVICE]
+  });
+  device.addEventListener('gattserverdisconnected', () => {
+    $('conn').textContent = 'disconnected';
+    $('btnConnect').disabled = false;
+    $('btnDisconnect').disabled = true;
+  });
+  server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(NUS_SERVICE);
+  tx = await svc.getCharacteristic(NUS_TX);
+  rx = await svc.getCharacteristic(NUS_RX);
+  await tx.startNotifications();
+  tx.addEventListener('characteristicvaluechanged', onNotify);
+  $('conn').textContent = 'connected · ' + device.name;
+  $('btnConnect').disabled = true;
+  $('btnDisconnect').disabled = false;
+  await send('STATUS');
+}
+
+function onNotify(e) {
+  const chunk = new TextDecoder().decode(e.target.value);
+  buf += chunk;
+  let nl;
+  while ((nl = buf.indexOf('\n')) >= 0) {
+    const line = buf.slice(0, nl).trim();
+    buf = buf.slice(nl + 1);
+    if (!line) continue;
+    handleLine(line);
+  }
+}
+
+function handleLine(line) {
+  log(line);
+  try {
+    const j = JSON.parse(line);
+    if (j.log) return;
+    if (j.t !== undefined) {
+      $('valT').textContent = j.t == null ? 'fail' : j.t.toFixed(1) + ' °C';
+      $('valH').textContent = j.rh == null ? 'fail' : j.rh.toFixed(1) + ' %';
+      $('valLdr').textContent = j.ldr;
+      $('valAuto').textContent = j.auto ? 'ON' : 'OFF';
+      $('valSleep').textContent = j.sleepMin + ' min';
+      $('valRange').textContent = j.ldrMin + ' / ' + j.ldrMax;
+      $('valD').textContent = j.avgChange;
+      $('valOn').textContent = j.on ? 'SPRAYING' : 'OFF';
+      $('dotOn').className = 'dot ' + (j.on ? 'on' : 'off');
+    }
+  } catch (_) {}
+}
+
+async function send(s) {
+  if (!rx) return;
+  await rx.writeValueWithoutResponse(new TextEncoder().encode(s));
+}
+
+$('btnConnect').onclick = () => connect().catch(err => { log(err.message); alert(err.message); });
+$('btnDisconnect').onclick = () => device && device.gatt.disconnect();
+$('btnOff').onclick = () => send('OFF');
+$('btnOn').onclick = () => send('ON');
+$('btnMist').onclick = () => send('MIST');
+$('btnFart').onclick = () => send('FART');
+$('btnAutoOn').onclick = () => send('AUTO ON');
+$('btnAutoOff').onclick = () => send('AUTO OFF');
+$('btnReset').onclick = () => send('RESET');
+$('btnLog').onclick = () => send('LOG');
+$('btnSleep').onclick = () => send('SLEEP');
+$('btnSetSleep').onclick = () => send('SETSLEEP ' + $('sleepMin').value);
+</script>
+</body>
+</html>
